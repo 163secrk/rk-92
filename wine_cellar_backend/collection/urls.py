@@ -16,4 +16,5 @@ urlpatterns = [
     path('stats/overview/', CollectionStatsViewSet.as_view({'get': 'overview'}), name='collection-overview'),
     path('stats/valuation-trend/', CollectionStatsViewSet.as_view({'get': 'valuation_trend'}), name='valuation-trend'),
     path('stats/maturity-distribution/', CollectionStatsViewSet.as_view({'get': 'maturity_distribution'}), name='maturity-distribution'),
+    path('stats/expiry-alerts/', CollectionStatsViewSet.as_view({'get': 'expiry_alerts'}), name='expiry-alerts'),
 ]

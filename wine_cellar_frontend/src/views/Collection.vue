@@ -70,6 +70,10 @@
               <el-tag size="small" :type="getMaturityType(wine.maturity)">{{ wine.maturity_display }}</el-tag>
             </div>
           </div>
+          <div v-if="wine.expiry_status !== 'normal'" class="wine-expiry-badge" :class="wine.expiry_status">
+            <el-icon><Warning /></el-icon>
+            <span>{{ getExpiryBadgeText(wine) }}</span>
+          </div>
           <div class="wine-image">
             <el-icon :size="64" color="#d1d5db"><Star /></el-icon>
           </div>
@@ -183,6 +187,16 @@ function getMaturityType(maturity) {
     declining: 'warning'
   }
   return map[maturity] || ''
+}
+
+function getExpiryBadgeText(wine) {
+  if (wine.expiry_status === 'expired') {
+    return `已过期 ${Math.abs(wine.years_until_expiry)} 年`
+  }
+  if (wine.expiry_status === 'expiring_soon') {
+    return `即将过期 (${wine.years_until_expiry}年)`
+  }
+  return ''
 }
 
 function viewDetail(id) {
@@ -410,5 +424,36 @@ onMounted(() => {
 .pagination {
   display: flex;
   justify-content: center;
+}
+
+.wine-expiry-badge {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.wine-expiry-badge.expired {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.wine-expiry-badge.expiring_soon {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.wine-card {
+  position: relative;
+  overflow: visible;
 }
 </style>

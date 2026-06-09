@@ -81,6 +81,19 @@ class Wine(models.Model):
             return 'drinking'
         return 'declining'
 
+    def get_expiry_status(self, threshold_years=1):
+        current_year = timezone.now().year
+        years_remaining = self.drinking_window_end - current_year
+        if years_remaining < 0:
+            return 'expired'
+        if years_remaining <= threshold_years:
+            return 'expiring_soon'
+        return 'normal'
+
+    def get_years_until_expiry(self):
+        current_year = timezone.now().year
+        return self.drinking_window_end - current_year
+
 
 class ValuationHistory(models.Model):
     wine = models.ForeignKey(Wine, related_name='valuations', on_delete=models.CASCADE)

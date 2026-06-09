@@ -80,3 +80,11 @@ export function getMaturityDistribution() {
     method: 'get'
   })
 }
+
+export function getExpiryAlerts(threshold) {
+  return request({
+    url: '/collection/stats/expiry-alerts/',
+    method: 'get',
+    params: { threshold }
+  })
+}

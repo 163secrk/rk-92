@@ -129,12 +129,89 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-row :gutter="20" class="charts-row">
+      <el-col :span="24">
+        <el-card class="chart-card card-shadow">
+          <template #header>
+            <div class="card-header">
+              <div class="header-left">
+                <el-icon :size="20" color="#f59e0b" style="margin-right: 8px;"><Warning /></el-icon>
+                <span>藏酒到期提醒</span>
+                <el-tag type="warning" size="small" style="margin-left: 12px;">
+                  即将过期 {{ expiryStats.expiring_soon_count }} 瓶
+                </el-tag>
+                <el-tag type="danger" size="small" style="margin-left: 8px;">
+                  已过期 {{ expiryStats.expired_count }} 瓶
+                </el-tag>
+              </div>
+              <div class="header-right">
+                <span style="font-size: 13px; color: #6b7280; margin-right: 8px;">阈值:</span>
+                <el-select v-model="expiryThreshold" size="small" style="width: 100px;" @change="loadExpiryAlerts">
+                  <el-option :label="1 + ' 年'" :value="1" />
+                  <el-option :label="2 + ' 年'" :value="2" />
+                  <el-option :label="3 + ' 年'" :value="3" />
+                </el-select>
+              </div>
+            </div>
+          </template>
+          <div v-if="expiryStats.expired.length > 0" class="expiry-section">
+            <div class="section-title expired-title">
+              <el-icon :size="16"><CircleClose /></el-icon>
+              <span>已过期酒品</span>
+            </div>
+            <div class="expiry-list">
+              <div v-for="wine in expiryStats.expired" :key="'exp-' + wine.id" class="expiry-item expired">
+                <div class="wine-basic">
+                  <div class="wine-name">{{ wine.name }}</div>
+                  <div class="wine-meta">{{ wine.chateau }} · {{ wine.vintage }} · {{ wine.quantity }}瓶</div>
+                </div>
+                <div class="wine-expiry">
+                  <el-tag type="danger" size="small">已过期</el-tag>
+                  <span class="expiry-years">超过 {{ Math.abs(wine.years_until_expiry) }} 年</span>
+                </div>
+                <div class="wine-value">
+                  <span class="value-label">适饮期</span>
+                  <span class="value-text">{{ wine.drinking_window_start }} - {{ wine.drinking_window_end }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="expiryStats.expiring_soon.length > 0" class="expiry-section">
+            <div class="section-title expiring-title">
+              <el-icon :size="16"><Clock /></el-icon>
+              <span>即将过期酒品</span>
+            </div>
+            <div class="expiry-list">
+              <div v-for="wine in expiryStats.expiring_soon" :key="'soon-' + wine.id" class="expiry-item expiring">
+                <div class="wine-basic">
+                  <div class="wine-name">{{ wine.name }}</div>
+                  <div class="wine-meta">{{ wine.chateau }} · {{ wine.vintage }} · {{ wine.quantity }}瓶</div>
+                </div>
+                <div class="wine-expiry">
+                  <el-tag type="warning" size="small">即将过期</el-tag>
+                  <span class="expiry-years">剩余 {{ wine.years_until_expiry }} 年</span>
+                </div>
+                <div class="wine-value">
+                  <span class="value-label">适饮期</span>
+                  <span class="value-text">{{ wine.drinking_window_start }} - {{ wine.drinking_window_end }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="expiryStats.expired.length === 0 && expiryStats.expiring_soon.length === 0" class="empty-state">
+            <el-icon :size="48" color="#10b981"><CircleCheck /></el-icon>
+            <div class="empty-text">所有酒品状态良好，暂无过期风险</div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { getCollectionOverview } from '@/api/collection'
+import { getCollectionOverview, getExpiryAlerts } from '@/api/collection'
 import { getCellars, getCellarHistory, getAlertStats } from '@/api/monitoring'
 import { getMortgageStats } from '@/api/mortgage'
 
@@ -159,6 +236,13 @@ const alertStats = reactive({
 const cellars = ref([])
 const selectedCellar = ref(null)
 const historyData = ref([])
+const expiryStats = reactive({
+  expiring_soon_count: 0,
+  expired_count: 0,
+  expiring_soon: [],
+  expired: []
+})
+const expiryThreshold = ref(1)
 
 const tempChartOption = computed(() => ({
   tooltip: {
@@ -368,13 +452,23 @@ async function loadMortgageStats() {
   }
 }
 
+async function loadExpiryAlerts() {
+  try {
+    const data = await getExpiryAlerts(expiryThreshold.value)
+    Object.assign(expiryStats, data)
+  } catch (e) {
+    console.error(e)
+  }
+}
+
 async function refreshData() {
   loading.value = true
   await Promise.all([
     loadCollectionStats(),
     loadCellars(),
     loadAlertStatsData(),
-    loadMortgageStats()
+    loadMortgageStats(),
+    loadExpiryAlerts()
   ])
   loading.value = false
 }
@@ -510,5 +604,134 @@ onMounted(() => {
 .price {
   font-weight: 600;
   color: #667eea;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.expiry-section {
+  margin-bottom: 24px;
+}
+
+.expiry-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.expired-title {
+  color: #ef4444;
+}
+
+.expiring-title {
+  color: #f59e0b;
+}
+
+.expiry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.expiry-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 10px;
+  border-left: 4px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.expiry-item:hover {
+  background: #f3f4f6;
+  transform: translateX(4px);
+}
+
+.expiry-item.expired {
+  border-left-color: #ef4444;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, #f9fafb 100%);
+}
+
+.expiry-item.expiring {
+  border-left-color: #f59e0b;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.05) 0%, #f9fafb 100%);
+}
+
+.wine-basic {
+  flex: 1;
+}
+
+.wine-basic .wine-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.wine-basic .wine-meta {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.wine-expiry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0 24px;
+  min-width: 100px;
+}
+
+.expiry-years {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.wine-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 120px;
+}
+
+.value-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 2px;
+}
+
+.value-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-text {
+  margin-top: 12px;
+  font-size: 15px;
+  color: #6b7280;
 }
 </style>

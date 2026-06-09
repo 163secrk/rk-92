@@ -199,3 +199,26 @@ class CollectionStatsViewSet(viewsets.ViewSet):
             distribution[maturity] = distribution.get(maturity, 0) + wine.quantity
 
         return Response(distribution)
+
+    @action(detail=False, methods=['get'])
+    def expiry_alerts(self, request):
+        threshold_years = int(request.query_params.get('threshold', 1))
+        wines = Wine.objects.exclude(status__in=['sold'])
+        
+        expiring_soon = []
+        expired = []
+        
+        for wine in wines:
+            expiry_status = wine.get_expiry_status(threshold_years)
+            if expiry_status == 'expired':
+                expired.append(wine)
+            elif expiry_status == 'expiring_soon':
+                expiring_soon.append(wine)
+        
+        return Response({
+            'expiring_soon_count': sum(w.quantity for w in expiring_soon),
+            'expired_count': sum(w.quantity for w in expired),
+            'expiring_soon': WineListSerializer(expiring_soon, many=True).data,
+            'expired': WineListSerializer(expired, many=True).data,
+            'threshold_years': threshold_years
+        })
