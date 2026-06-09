@@ -26,6 +26,11 @@ class MortgageApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def submit(self, request, pk=None):
         app = self.get_object()
+        if app.status != 'draft':
+            return Response(
+                {'detail': f'提交失败：申请状态不正确，当前状态为「{app.get_status_display()}」，仅「草稿」状态才能提交'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         app.status = 'submitted'
         app.save()
         return Response(MortgageApplicationSerializer(app).data)
@@ -33,6 +38,11 @@ class MortgageApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def start_review(self, request, pk=None):
         app = self.get_object()
+        if app.status != 'submitted':
+            return Response(
+                {'detail': f'开始审核失败：申请状态不正确，当前状态为「{app.get_status_display()}」，仅「已提交」状态才能开始审核'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         app.status = 'reviewing'
         app.review_date = timezone.now()
         app.save()
@@ -41,11 +51,49 @@ class MortgageApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         app = self.get_object()
+
+        if app.status != 'reviewing':
+            return Response(
+                {'detail': f'审批失败：申请状态不正确，当前状态为「{app.get_status_display()}」，仅「审核中」状态才能审批'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         approved_amount = Decimal(request.data.get('approved_amount', app.loan_amount))
         review_notes = request.data.get('review_notes', '')
 
+        if approved_amount <= 0:
+            return Response(
+                {'detail': '审批失败：批准金额必须大于0'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        max_loan_amount = Decimal('10000000')
+        if approved_amount > max_loan_amount:
+            return Response(
+                {'detail': f'审批失败：批准金额超限（当前{approved_amount}元），单笔贷款最高为1000万元'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         collaterals = app.collaterals.all()
+        if not collaterals.exists():
+            return Response(
+                {'detail': '审批失败：未添加抵押品，请先添加抵押品后再批准'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         collateral_value = sum(c.total_value for c in collaterals)
+        if collateral_value <= 0:
+            return Response(
+                {'detail': '审批失败：抵押品估值无效'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        ltv_ratio = float(approved_amount / collateral_value * 100)
+        if ltv_ratio > 70:
+            return Response(
+                {'detail': f'审批失败：抵押率过高（当前{ltv_ratio:.1f}%），最高不得超过70%。请降低批准金额或要求申请人增加抵押品。'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         app.status = 'approved'
         app.approved_amount = approved_amount
@@ -63,6 +111,11 @@ class MortgageApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         app = self.get_object()
+        if app.status != 'reviewing':
+            return Response(
+                {'detail': f'拒绝失败：申请状态不正确，当前状态为「{app.get_status_display()}」，仅「审核中」状态才能拒绝'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         app.status = 'rejected'
         app.review_notes = request.data.get('review_notes', '')
         app.review_date = timezone.now()
@@ -72,6 +125,47 @@ class MortgageApplicationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def disburse(self, request, pk=None):
         app = self.get_object()
+
+        if app.status != 'approved':
+            return Response(
+                {'detail': f'放款失败：申请状态不正确，当前状态为「{app.get_status_display()}」，仅「已批准」状态才能放款'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not app.approved_amount or app.approved_amount <= 0:
+            return Response(
+                {'detail': '放款失败：批准金额无效，请先完成审核'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        collaterals = app.collaterals.all()
+        if not collaterals.exists():
+            return Response(
+                {'detail': '放款失败：未添加抵押品，请先添加抵押品'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        collateral_value = sum(c.total_value for c in collaterals)
+        if collateral_value <= 0:
+            return Response(
+                {'detail': '放款失败：抵押品估值无效'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        ltv_ratio = float(app.approved_amount / collateral_value * 100)
+        if ltv_ratio > 70:
+            return Response(
+                {'detail': f'放款失败：抵押率过高（当前{ltv_ratio:.1f}%），最高不得超过70%。请减少贷款金额或增加抵押品。'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        max_loan_amount = Decimal('10000000')
+        if app.approved_amount > max_loan_amount:
+            return Response(
+                {'detail': f'放款失败：贷款金额超限（当前{app.approved_amount}元），单笔贷款最高为1000万元'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         app.status = 'active'
         app.start_date = timezone.now()
         app.maturity_date = timezone.now() + timedelta(days=30 * app.loan_term_months)

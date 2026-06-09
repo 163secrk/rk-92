@@ -32,6 +32,11 @@ const routes = [
         component: () => import('@/views/Collection.vue')
       },
       {
+        path: 'collection/new',
+        name: 'WineCreate',
+        component: () => import('@/views/WineCreate.vue')
+      },
+      {
         path: 'collection/:id',
         name: 'WineDetail',
         component: () => import('@/views/WineDetail.vue')

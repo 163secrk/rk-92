@@ -124,21 +124,21 @@
     </el-card>
 
     <el-dialog v-model="createDialogVisible" title="新建抵押申请" width="600px">
-      <el-form :model="createForm" label-width="100px">
-        <el-form-item label="申请人">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
+        <el-form-item label="申请人" prop="applicant_name">
           <el-input v-model="createForm.applicant_name" />
         </el-form-item>
-        <el-form-item label="身份证号">
+        <el-form-item label="身份证号" prop="applicant_id">
           <el-input v-model="createForm.applicant_id" />
         </el-form-item>
-        <el-form-item label="联系电话">
-          <el-input v-model="createForm.applicant_phone" />
+        <el-form-item label="联系电话" prop="applicant_phone">
+          <el-input v-model="createForm.applicant_phone" placeholder="请输入11位手机号" />
         </el-form-item>
-        <el-form-item label="邮箱">
+        <el-form-item label="邮箱" prop="applicant_email">
           <el-input v-model="createForm.applicant_email" />
         </el-form-item>
-        <el-form-item label="贷款金额">
-          <el-input-number v-model="createForm.loan_amount" :min="0" :step="10000" style="width: 100%;" />
+        <el-form-item label="贷款金额" prop="loan_amount">
+          <el-input-number v-model="createForm.loan_amount" :min="1000" :max="10000000" :step="10000" style="width: 100%;" />
         </el-form-item>
         <el-form-item label="贷款期限">
           <el-select v-model="createForm.loan_term_months" style="width: 100%;">
@@ -222,6 +222,7 @@ const createDialogVisible = ref(false)
 const approveDialogVisible = ref(false)
 const rejectDialogVisible = ref(false)
 const currentApplication = ref(null)
+const createFormRef = ref(null)
 
 const createForm = reactive({
   applicant_name: '',
@@ -242,6 +243,62 @@ const approveForm = reactive({
 const rejectForm = reactive({
   review_notes: ''
 })
+
+const validatePhone = (rule, value, callback) => {
+  const phoneReg = /^1[3-9]\d{9}$/
+  if (!value) {
+    callback(new Error('请输入联系电话'))
+  } else if (!phoneReg.test(value)) {
+    callback(new Error('请输入正确的11位手机号码'))
+  } else {
+    callback()
+  }
+}
+
+const validateLoanAmount = (rule, value, callback) => {
+  if (!value || value <= 0) {
+    callback(new Error('请输入贷款金额'))
+  } else if (value < 1000) {
+    callback(new Error('贷款金额不能低于1000元'))
+  } else if (value > 10000000) {
+    callback(new Error('贷款金额不能超过1000万元'))
+  } else {
+    callback()
+  }
+}
+
+const validateIdCard = (rule, value, callback) => {
+  const idReg = /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/
+  if (!value) {
+    callback(new Error('请输入身份证号'))
+  } else if (!idReg.test(value)) {
+    callback(new Error('请输入正确的身份证号'))
+  } else {
+    callback()
+  }
+}
+
+const validateEmail = (rule, value, callback) => {
+  const emailReg = /^[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+$/
+  if (!value) {
+    callback(new Error('请输入邮箱'))
+  } else if (!emailReg.test(value)) {
+    callback(new Error('请输入正确的邮箱格式'))
+  } else {
+    callback()
+  }
+}
+
+const createRules = {
+  applicant_name: [{ required: true, message: '请输入申请人姓名', trigger: 'blur' }],
+  applicant_id: [{ validator: validateIdCard, trigger: 'blur' }],
+  applicant_phone: [{ validator: validatePhone, trigger: 'blur' }],
+  applicant_email: [{ validator: validateEmail, trigger: 'blur' }],
+  loan_amount: [{ validator: validateLoanAmount, trigger: 'blur' }],
+  loan_term_months: [{ required: true, message: '请选择贷款期限', trigger: 'change' }],
+  interest_rate: [{ required: true, message: '请输入年利率', trigger: 'blur' }],
+  purpose: [{ required: true, message: '请输入贷款用途', trigger: 'blur' }],
+}
 
 const statusOptions = [
   { value: 'draft', label: '草稿' },
@@ -294,6 +351,13 @@ function showCreateDialog() {
 }
 
 async function createApplication() {
+  if (!createFormRef.value) return
+  try {
+    await createFormRef.value.validate()
+  } catch (e) {
+    return
+  }
+
   try {
     await apiCreateApplication(createForm)
     ElMessage.success('申请创建成功')

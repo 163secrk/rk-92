@@ -52,6 +52,38 @@ class MortgageApplicationListSerializer(serializers.ModelSerializer):
 
 
 class MortgageApplicationCreateSerializer(serializers.ModelSerializer):
+    def validate_applicant_phone(self, value):
+        import re
+        phone_reg = r'^1[3-9]\d{9}$'
+        if not re.match(phone_reg, value):
+            raise serializers.ValidationError('请输入正确的11位手机号码')
+        return value
+
+    def validate_loan_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('贷款金额必须大于0')
+        if value < 1000:
+            raise serializers.ValidationError('贷款金额不能低于1000元')
+        if value > 10000000:
+            raise serializers.ValidationError('贷款金额不能超过1000万元')
+        return value
+
+    def validate_applicant_id(self, value):
+        import re
+        id_reg = r'(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)'
+        if not re.match(id_reg, value):
+            raise serializers.ValidationError('请输入正确的身份证号')
+        return value
+
+    def validate(self, attrs):
+        from django.core.validators import validate_email
+        from django.core.exceptions import ValidationError
+        try:
+            validate_email(attrs.get('applicant_email', ''))
+        except ValidationError:
+            raise serializers.ValidationError({'applicant_email': '请输入正确的邮箱格式'})
+        return attrs
+
     class Meta:
         model = MortgageApplication
         fields = ['applicant_name', 'applicant_id', 'applicant_phone', 'applicant_email',
