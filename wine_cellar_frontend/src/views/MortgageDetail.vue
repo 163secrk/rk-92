@@ -357,8 +357,10 @@ async function addCollateral() {
     ElMessage.success('添加成功')
     addCollateralDialogVisible.value = false
     loadApplication()
+    loadAvailableWines()
   } catch (e) {
     console.error(e)
+    ElMessage.error(e.response?.data?.detail || '添加失败，请重试')
   }
 }
 
@@ -370,8 +372,10 @@ async function removeCollateral(row) {
       await apiRemoveCollateral(application.value.id, { collateral_id: row.id })
       ElMessage.success('移除成功')
       loadApplication()
+      loadAvailableWines()
     } catch (e) {
       console.error(e)
+      ElMessage.error(e.response?.data?.detail || '移除失败，请重试')
     }
   }).catch(() => {})
 }
@@ -460,6 +464,8 @@ async function disburse() {
       loadApplication()
     } catch (e) {
       console.error(e)
+      ElMessage.error(e.response?.data?.detail || '放款失败，请重试')
+      loadApplication()
     }
   }).catch(() => {})
 }

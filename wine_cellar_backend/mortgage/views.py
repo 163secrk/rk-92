@@ -3,7 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 from django.db.models import Sum
-from decimal import Decimal
+from django.db import transaction
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timedelta
 from .models import MortgageApplication, MortgageCollateral, RepaymentSchedule, RepaymentRecord
 from .serializers import (
@@ -166,33 +167,42 @@ class MortgageApplicationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        app.status = 'active'
-        app.start_date = timezone.now()
-        app.maturity_date = timezone.now() + timedelta(days=30 * app.loan_term_months)
-        app.remaining_amount = app.approved_amount
-        app.save()
-
         principal = app.approved_amount
-        rate = app.interest_rate / 100 / 12
+        rate = Decimal(app.interest_rate) / Decimal('100') / Decimal('12')
         n = app.loan_term_months
 
-        monthly_payment = principal * rate * (1 + rate)**n / ((1 + rate)**n - 1)
+        monthly_payment = principal * rate * (Decimal('1') + rate)**n / ((Decimal('1') + rate)**n - Decimal('1'))
+        monthly_payment = monthly_payment.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
+        schedules = []
         remaining = principal
         for i in range(1, n + 1):
             interest = remaining * rate
+            interest = interest.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             principal_payment = monthly_payment - interest
             remaining -= principal_payment
             due_date = timezone.now() + timedelta(days=30 * i)
 
-            RepaymentSchedule.objects.create(
-                application=app,
-                payment_number=i,
-                due_date=due_date,
-                principal_amount=principal_payment,
-                interest_amount=interest,
-                total_amount=monthly_payment,
-            )
+            schedules.append({
+                'payment_number': i,
+                'due_date': due_date,
+                'principal_amount': principal_payment,
+                'interest_amount': interest,
+                'total_amount': monthly_payment,
+            })
+
+        with transaction.atomic():
+            app.status = 'active'
+            app.start_date = timezone.now()
+            app.maturity_date = timezone.now() + timedelta(days=30 * app.loan_term_months)
+            app.remaining_amount = app.approved_amount
+            app.save()
+
+            for sched in schedules:
+                RepaymentSchedule.objects.create(
+                    application=app,
+                    **sched
+                )
 
         return Response(MortgageApplicationSerializer(app).data)
 
@@ -203,25 +213,66 @@ class MortgageApplicationViewSet(viewsets.ModelViewSet):
         wine_id = request.data.get('wine_id')
         quantity = int(request.data.get('quantity', 1))
 
+        if app.status not in ['draft', 'submitted', 'reviewing']:
+            return Response(
+                {'detail': f'添加抵押品失败：申请状态不正确，当前状态为「{app.get_status_display()}」，仅「草稿/已提交/审核中」状态才能添加抵押品'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         wine = Wine.objects.get(id=wine_id)
+
+        if wine.quantity < quantity:
+            return Response(
+                {'detail': f'添加抵押品失败：库存不足，当前库存{wine.quantity}瓶，申请抵押{quantity}瓶'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if wine.status == 'sold':
+            return Response(
+                {'detail': '添加抵押品失败：该酒品已售出，无法作为抵押品'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         unit_value = wine.current_value
 
-        collateral = MortgageCollateral.objects.create(
-            application=app,
-            wine=wine,
-            quantity=quantity,
-            unit_value=unit_value,
-            total_value=unit_value * quantity,
-            storage_location=wine.cellar_location,
-        )
+        with transaction.atomic():
+            collateral = MortgageCollateral.objects.create(
+                application=app,
+                wine=wine,
+                quantity=quantity,
+                unit_value=unit_value,
+                total_value=unit_value * quantity,
+                storage_location=wine.cellar_location,
+            )
+
+            wine.quantity -= quantity
+            if wine.quantity == 0:
+                wine.status = 'mortgaged'
+            wine.save()
 
         return Response(MortgageCollateralSerializer(collateral).data)
 
     @action(detail=True, methods=['post'])
     def remove_collateral(self, request, pk=None):
+        app = self.get_object()
         collateral_id = request.data.get('collateral_id')
         collateral = MortgageCollateral.objects.get(id=collateral_id)
-        collateral.delete()
+
+        if app.status not in ['draft', 'submitted', 'reviewing']:
+            return Response(
+                {'detail': f'移除抵押品失败：申请状态不正确，当前状态为「{app.get_status_display()}」，仅「草稿/已提交/审核中」状态才能移除抵押品'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            wine = collateral.wine
+            wine.quantity += collateral.quantity
+            if wine.status == 'mortgaged' and wine.quantity > 0:
+                wine.status = 'cellared'
+            wine.save()
+
+            collateral.delete()
+
         return Response({'status': 'success'})
 
     @action(detail=False, methods=['get'])
