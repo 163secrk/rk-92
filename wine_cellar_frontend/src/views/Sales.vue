@@ -2,13 +2,13 @@
   <div class="sales-page">
     <div class="page-header">
       <div class="header-title">
-        <h2>名酒销售管理</h2>
-        <p>管理客户档案、销售订单和拍卖记录</p>
+        <h2>{{ isAdmin ? '名酒销售管理' : '我的订单与拍卖' }}</h2>
+        <p>{{ isAdmin ? '管理客户档案、销售订单和拍卖记录' : '查看您的订单记录和参与的拍卖' }}</p>
       </div>
       <el-tabs v-model="activeTab" class="header-tabs" @tab-change="handleTabChange">
-        <el-tab-pane label="客户档案" name="customers" />
-        <el-tab-pane label="售出订单" name="orders" />
-        <el-tab-pane label="拍卖记录" name="auctions" />
+        <el-tab-pane v-if="isAdmin" label="客户档案" name="customers" />
+        <el-tab-pane :label="isAdmin ? '售出订单' : '我的订单'" name="orders" />
+        <el-tab-pane :label="isAdmin ? '拍卖记录' : '我的拍卖'" name="auctions" />
       </el-tabs>
     </div>
 
@@ -92,7 +92,10 @@
             <el-option label="已完成" value="completed" />
             <el-option label="已取消" value="cancelled" />
           </el-select>
-          <el-button type="primary" @click="openOrderForm()">
+          <el-tag v-if="orderCustomer && isAdmin" closable type="primary" @close="clearOrderCustomerFilter">
+            客户: {{ orderCustomerName }}
+          </el-tag>
+          <el-button v-if="isAdmin" type="primary" @click="openOrderForm()">
             <el-icon><Plus /></el-icon>
             新建订单
           </el-button>
@@ -118,13 +121,18 @@
               {{ formatDate(row.order_date) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="280" fixed="right">
+          <el-table-column v-if="isAdmin" label="操作" width="280" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" link size="small" @click="viewOrderDetail(row)">详情</el-button>
               <el-button type="success" link size="small" v-if="row.status === 'draft'" @click="confirmOrder(row)">确认</el-button>
               <el-button type="warning" link size="small" v-if="row.status === 'confirmed'" @click="shipOrder(row)">发货</el-button>
               <el-button type="success" link size="small" v-if="row.status === 'shipped'" @click="completeOrder(row)">完成</el-button>
               <el-button type="danger" link size="small" v-if="row.status === 'draft' || row.status === 'confirmed'" @click="cancelOrder(row)">取消</el-button>
+            </template>
+          </el-table-column>
+          <el-table-column v-else label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link size="small" @click="viewOrderDetail(row)">详情</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -149,7 +157,7 @@
             <el-option label="已结束" value="ended" />
             <el-option label="已取消" value="cancelled" />
           </el-select>
-          <el-button type="primary" @click="openAuctionForm()">
+          <el-button v-if="isAdmin" type="primary" @click="openAuctionForm()">
             <el-icon><Plus /></el-icon>
             创建拍卖
           </el-button>
@@ -184,12 +192,18 @@
               {{ formatDate(row.start_time) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right">
+          <el-table-column v-if="isAdmin" label="操作" width="240" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" link size="small" @click="viewAuctionDetail(row)">详情</el-button>
               <el-button type="success" link size="small" v-if="row.status === 'upcoming'" @click="startAuction(row)">开始</el-button>
               <el-button type="warning" link size="small" v-if="row.status === 'ongoing'" @click="openBidForm(row)">出价</el-button>
               <el-button type="danger" link size="small" v-if="row.status === 'ongoing'" @click="endAuction(row)">结束</el-button>
+            </template>
+          </el-table-column>
+          <el-table-column v-else label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link size="small" @click="viewAuctionDetail(row)">详情</el-button>
+              <el-button type="warning" link size="small" v-if="row.status === 'ongoing'" @click="openBidForm(row)">出价</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -396,7 +410,7 @@
 
     <el-dialog v-model="bidFormVisible" title="出价" width="500px">
       <el-form :model="bidForm" label-width="100px">
-        <el-form-item label="选择客户">
+        <el-form-item v-if="isAdmin" label="选择客户">
           <el-select
             v-model="bidForm.customer"
             placeholder="搜索并选择客户"
@@ -413,6 +427,9 @@
               :value="cust.id"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="isCustomer" label="出价人">
+          <span>{{ userStore.userInfo.name }}</span>
         </el-form-item>
         <el-form-item label="出价金额(元)">
           <el-input-number v-model="bidForm.amount" :min="0" :precision="2" style="width: 100%" />
@@ -593,9 +610,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
 import {
   getCustomers, getCustomer, createCustomer, updateCustomer,
   deleteCustomer as deleteCustomerApi, searchCustomers as searchCustomersApi,
@@ -606,7 +624,12 @@ import {
 } from '@/api/sales'
 import { getWines } from '@/api/collection'
 
-const activeTab = ref('customers')
+const userStore = useUserStore()
+
+const isAdmin = computed(() => userStore.isAdmin)
+const isCustomer = computed(() => userStore.isCustomer)
+
+const activeTab = ref(userStore.isCustomer ? 'orders' : 'customers')
 
 const customers = ref([])
 const customerLoading = ref(false)
@@ -620,6 +643,8 @@ const orderLoading = ref(false)
 const orderPage = ref(1)
 const orderTotal = ref(0)
 const orderStatus = ref('')
+const orderCustomer = ref(null)
+const orderCustomerName = ref('')
 
 const auctions = ref([])
 const auctionLoading = ref(false)
@@ -690,6 +715,13 @@ function handleTabChange(tab) {
   }
 }
 
+function clearOrderCustomerFilter() {
+  orderCustomer.value = null
+  orderCustomerName.value = ''
+  orderPage.value = 1
+  loadOrders()
+}
+
 async function loadCustomers() {
   customerLoading.value = true
   try {
@@ -727,10 +759,25 @@ async function searchCustomers() {
   }
 }
 
-function openCustomerForm(customer = null) {
+async function openCustomerForm(customer = null) {
   editingCustomer.value = customer
   if (customer) {
-    customerForm.value = { ...customer }
+    try {
+      const res = await getCustomer(customer.id)
+      customerForm.value = {
+        name: res.name || '',
+        gender: res.gender || '',
+        phone: res.phone || '',
+        email: res.email || '',
+        id_card: res.id_card || '',
+        address: res.address || '',
+        notes: res.notes || ''
+      }
+    } catch (e) {
+      console.error(e)
+      ElMessage.error('获取客户详情失败')
+      return
+    }
   } else {
     customerForm.value = {
       name: '',
@@ -780,6 +827,9 @@ async function deleteCustomer(customer) {
 function viewCustomerOrders(customer) {
   activeTab.value = 'orders'
   orderStatus.value = ''
+  orderCustomer.value = customer.id
+  orderCustomerName.value = customer.name
+  orderPage.value = 1
   loadOrders()
 }
 
@@ -791,6 +841,7 @@ async function loadOrders() {
       page_size: pageSize.value
     }
     if (orderStatus.value) params.status = orderStatus.value
+    if (orderCustomer.value) params.customer = orderCustomer.value
     const res = await getOrders(params)
     orders.value = res.results
     orderTotal.value = res.count
@@ -1049,14 +1100,14 @@ async function endAuction(auction) {
 function openBidForm(auction) {
   currentAuction.value = auction
   bidForm.value = {
-    customer: null,
+    customer: isCustomer.value ? userStore.userInfo.customer_id : null,
     amount: auction.current_bid ? auction.current_bid * 1.1 : auction.start_price
   }
   bidFormVisible.value = true
 }
 
 async function submitBid() {
-  if (!bidForm.value.customer) {
+  if (!bidForm.value.customer && isAdmin.value) {
     ElMessage.warning('请选择客户')
     return
   }
@@ -1064,8 +1115,12 @@ async function submitBid() {
     ElMessage.warning('请输入有效出价金额')
     return
   }
+  const bidData = {
+    customer: bidForm.value.customer,
+    amount: bidForm.value.amount
+  }
   try {
-    await placeBid(currentAuction.value.id, bidForm.value)
+    await placeBid(currentAuction.value.id, bidData)
     ElMessage.success('出价成功')
     bidFormVisible.value = false
     loadAuctions()
@@ -1119,7 +1174,15 @@ function formatDate(value) {
 }
 
 onMounted(() => {
-  loadCustomers()
+  if (isCustomer.value && userStore.userInfo.customer_id) {
+    orderCustomer.value = userStore.userInfo.customer_id
+    orderCustomerName.value = userStore.userInfo.name
+  }
+  if (isAdmin.value) {
+    loadCustomers()
+  } else {
+    loadOrders()
+  }
 })
 </script>
 

@@ -13,30 +13,38 @@
         active-text-color="#667eea"
         class="menu"
       >
-        <el-menu-item index="/dashboard">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>总览仪表盘</span>
-        </el-menu-item>
-        <el-menu-item index="/monitoring">
-          <el-icon><Monitor /></el-icon>
-          <span>恒温监控</span>
-        </el-menu-item>
-        <el-menu-item index="/collection">
-          <el-icon><Goods /></el-icon>
-          <span>藏品估值</span>
-        </el-menu-item>
-        <el-menu-item index="/tasting">
-          <el-icon><WineGlass /></el-icon>
-          <span>品鉴活动</span>
-        </el-menu-item>
-        <el-menu-item index="/mortgage">
-          <el-icon><Money /></el-icon>
-          <span>名酒抵押</span>
-        </el-menu-item>
-        <el-menu-item index="/sales">
-          <el-icon><ShoppingCart /></el-icon>
-          <span>销售管理</span>
-        </el-menu-item>
+        <template v-if="userStore.isAdmin">
+          <el-menu-item index="/dashboard">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>总览仪表盘</span>
+          </el-menu-item>
+          <el-menu-item index="/monitoring">
+            <el-icon><Monitor /></el-icon>
+            <span>恒温监控</span>
+          </el-menu-item>
+          <el-menu-item index="/collection">
+            <el-icon><Goods /></el-icon>
+            <span>藏品估值</span>
+          </el-menu-item>
+          <el-menu-item index="/tasting">
+            <el-icon><WineGlass /></el-icon>
+            <span>品鉴活动</span>
+          </el-menu-item>
+          <el-menu-item index="/mortgage">
+            <el-icon><Money /></el-icon>
+            <span>名酒抵押</span>
+          </el-menu-item>
+          <el-menu-item index="/sales">
+            <el-icon><ShoppingCart /></el-icon>
+            <span>销售管理</span>
+          </el-menu-item>
+        </template>
+        <template v-else>
+          <el-menu-item index="/sales">
+            <el-icon><ShoppingCart /></el-icon>
+            <span>我的订单</span>
+          </el-menu-item>
+        </template>
       </el-menu>
     </el-aside>
 
@@ -49,7 +57,7 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <el-badge :value="alertCount" class="alert-badge" v-if="alertCount > 0">
+          <el-badge :value="alertCount" class="alert-badge" v-if="alertCount > 0 && userStore.isAdmin">
             <el-button type="primary" text @click="showAlerts">
               <el-icon><Bell /></el-icon>
             </el-button>
@@ -57,7 +65,10 @@
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-avatar :size="32" icon="UserFilled" />
-              <span class="username">{{ userStore.userInfo.username }}</span>
+              <span class="username">{{ displayName }}</span>
+              <el-tag v-if="userStore.isCustomer" size="small" type="success" style="margin-left: 4px;">
+                客户
+              </el-tag>
               <el-icon><CaretBottom /></el-icon>
             </span>
             <template #dropdown>
@@ -122,7 +133,14 @@ const alertDrawerVisible = ref(false)
 const alertCount = ref(0)
 const activeAlerts = ref([])
 
-const pageTitleMap = {
+const displayName = computed(() => {
+  if (userStore.isCustomer && userStore.userInfo.name) {
+    return userStore.userInfo.name
+  }
+  return userStore.userInfo.username || '用户'
+})
+
+const adminPageTitleMap = {
   '/dashboard': '总览仪表盘',
   '/monitoring': '恒温监控',
   '/collection': '藏品估值',
@@ -131,9 +149,16 @@ const pageTitleMap = {
   '/sales': '销售管理'
 }
 
+const customerPageTitleMap = {
+  '/sales': '我的订单'
+}
+
 const currentPageTitle = computed(() => {
   const path = route.path.split('/').slice(0, 2).join('/')
-  return pageTitleMap[path] || '未知页面'
+  if (userStore.isAdmin) {
+    return adminPageTitleMap[path] || '未知页面'
+  }
+  return customerPageTitleMap[path] || '未知页面'
 })
 
 async function loadAlertStats() {

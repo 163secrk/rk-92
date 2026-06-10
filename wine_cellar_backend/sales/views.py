@@ -1,8 +1,11 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework import viewsets, status, serializers
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncMonth
+from django.contrib.auth.models import User
 from django.utils import timezone
 from decimal import Decimal
 from .models import Customer, SaleOrder, SaleOrderItem, AuctionRecord, AuctionBid
@@ -278,3 +281,79 @@ class SalesStatsViewSet(viewsets.ViewSet):
             'by_month': by_month,
             'top_customers': top_customers_data,
         })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def customer_register(request):
+    phone = request.data.get('phone')
+    password = request.data.get('password')
+    name = request.data.get('name')
+    gender = request.data.get('gender', '')
+    email = request.data.get('email', '')
+    id_card = request.data.get('id_card', '')
+    address = request.data.get('address', '')
+
+    if not phone or not password or not name:
+        return Response({'error': '手机号、姓名、密码必填'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if Customer.objects.filter(phone=phone).exists():
+        return Response({'error': '该手机号已注册'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(username=phone).exists():
+        return Response({'error': '该手机号已注册'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.create_user(username=phone, password=password, email=email)
+    customer = Customer.objects.create(
+        user=user,
+        name=name,
+        phone=phone,
+        gender=gender,
+        email=email,
+        id_card=id_card,
+        address=address
+    )
+
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+        'user': {
+            'id': customer.id,
+            'name': customer.name,
+            'phone': customer.phone,
+            'role': 'customer',
+            'level': customer.level,
+            'level_display': customer.get_level_display()
+        }
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_user_info(request):
+    user = request.user
+    is_staff = user.is_staff or user.is_superuser
+
+    data = {
+        'username': user.username,
+        'email': user.email,
+        'role': 'admin' if is_staff else 'customer',
+    }
+
+    if not is_staff:
+        try:
+            customer = Customer.objects.get(user=user)
+            data.update({
+                'customer_id': customer.id,
+                'name': customer.name,
+                'phone': customer.phone,
+                'level': customer.level,
+                'level_display': customer.get_level_display(),
+                'total_purchases': float(customer.total_purchases),
+                'total_orders': customer.total_orders
+            })
+        except Customer.DoesNotExist:
+            pass
+
+    return Response(data)

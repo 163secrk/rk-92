@@ -77,10 +77,27 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const token = localStorage.getItem('token')
+  const userInfoStr = localStorage.getItem('userInfo')
+  let userInfo = {}
+  try {
+    userInfo = JSON.parse(userInfoStr || '{}')
+  } catch (e) {}
+
   if (to.meta.requiresAuth && !token) {
     return '/login'
   } else if (to.path === '/login' && token) {
+    if (userInfo.role === 'customer') {
+      return '/sales'
+    }
     return '/dashboard'
+  }
+
+  if (token && userInfo.role === 'customer') {
+    const allowedPaths = ['/sales', '/login']
+    const basePath = '/' + to.path.split('/').filter(Boolean)[0]
+    if (!allowedPaths.includes(basePath) && to.path !== '/login') {
+      return '/sales'
+    }
   }
 })
 

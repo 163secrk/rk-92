@@ -15,3 +15,18 @@ export function refreshToken(refresh) {
     data: { refresh }
   })
 }
+
+export function registerCustomer(data) {
+  return request({
+    url: '/sales/auth/register/',
+    method: 'post',
+    data
+  })
+}
+
+export function getCurrentUserInfo() {
+  return request({
+    url: '/sales/auth/me/',
+    method: 'get'
+  })
+}
