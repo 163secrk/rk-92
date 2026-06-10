@@ -16,6 +16,7 @@ def api_root(request):
             'monitoring': '/api/monitoring/',
             'collection': '/api/collection/',
             'mortgage': '/api/mortgage/',
+            'tasting': '/api/tasting/',
         }
     })
 
@@ -27,4 +28,5 @@ urlpatterns = [
     path('api/monitoring/', include('monitoring.urls')),
     path('api/collection/', include('collection.urls')),
     path('api/mortgage/', include('mortgage.urls')),
+    path('api/tasting/', include('tasting.urls')),
 ]

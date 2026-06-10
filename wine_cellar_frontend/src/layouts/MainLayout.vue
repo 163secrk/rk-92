@@ -25,6 +25,10 @@
           <el-icon><Goods /></el-icon>
           <span>藏品估值</span>
         </el-menu-item>
+        <el-menu-item index="/tasting">
+          <el-icon><WineGlass /></el-icon>
+          <span>品鉴活动</span>
+        </el-menu-item>
         <el-menu-item index="/mortgage">
           <el-icon><Money /></el-icon>
           <span>名酒抵押</span>
@@ -118,6 +122,7 @@ const pageTitleMap = {
   '/dashboard': '总览仪表盘',
   '/monitoring': '恒温监控',
   '/collection': '藏品估值',
+  '/tasting': '品鉴活动',
   '/mortgage': '名酒抵押'
 }
 

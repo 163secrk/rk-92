@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'monitoring',
     'collection',
     'mortgage',
+    'tasting',
 ]
 
 MIDDLEWARE = [
