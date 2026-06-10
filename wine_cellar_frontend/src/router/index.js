@@ -60,6 +60,11 @@ const routes = [
         path: 'mortgage/:id',
         name: 'MortgageDetail',
         component: () => import('@/views/MortgageDetail.vue')
+      },
+      {
+        path: 'sales',
+        name: 'Sales',
+        component: () => import('@/views/Sales.vue')
       }
     ]
   }

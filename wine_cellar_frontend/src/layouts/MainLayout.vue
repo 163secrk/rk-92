@@ -33,6 +33,10 @@
           <el-icon><Money /></el-icon>
           <span>名酒抵押</span>
         </el-menu-item>
+        <el-menu-item index="/sales">
+          <el-icon><ShoppingCart /></el-icon>
+          <span>销售管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -123,7 +127,8 @@ const pageTitleMap = {
   '/monitoring': '恒温监控',
   '/collection': '藏品估值',
   '/tasting': '品鉴活动',
-  '/mortgage': '名酒抵押'
+  '/mortgage': '名酒抵押',
+  '/sales': '销售管理'
 }
 
 const currentPageTitle = computed(() => {
